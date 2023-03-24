@@ -8,11 +8,15 @@ require(mitools)
 
 cox_imp <- function(data, formula, terms = NULL) {
   
+  # data <- imputed_tte_data_5
+  # formula <- model_formulas[1]
+  # terms = list(c("DIAB_DX5YR_FLAG", "DIAB_DX5YR_FLAG:ASIAN"))
+  
   m <- data %>% length()
   sep_models <- vector(mode = "list", length = m)
+  
   for(i in 1:m) {
-    sep_models[[i]] <- coxph(
-      as.formula(formula), data = data[[i]])
+    sep_models[[i]] <- coxph(as.formula(formula), data = data[[i]])
   }
   
   # pool the models to get a combined summary 
@@ -22,7 +26,7 @@ cox_imp <- function(data, formula, terms = NULL) {
     mutate(lowerCI = estimate - 1.96*std.error, 
            upperCI = estimate + 1.96*std.error) %>% 
     select(estimate, lowerCI, upperCI) %>% 
-    exp() %>%  
+    exp() %>% 
     cbind(term = as.character(linear_summary$term), ., 
           p.value = linear_summary$p.value) %>% 
     mutate(p.value = ifelse(p.value < 0.001, 
@@ -32,8 +36,6 @@ cox_imp <- function(data, formula, terms = NULL) {
   # calculate combined HR and CI given the terms to combine
   
   if (!is.null(terms)) {
-    # comb_hr <- tibble(ethnicity = character(), comb_hr = numeric(), 
-    #                   CI_lower = numeric(), CI_upper = numeric())
     comb_hr <- data.frame(
       term = character(), estimate = numeric(),
       lowerCI = numeric(), upperCI = numeric())
