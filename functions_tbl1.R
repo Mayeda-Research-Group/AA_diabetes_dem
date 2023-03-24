@@ -12,11 +12,14 @@ t1_relabel <- function(df) {
       ASIAN = factor(ASIAN, levels = c(0, 1), labels = c("White", "Asian")), 
       
       ETHNICITY_REV = factor(ETHNICITY_REV, 
-                             levels = c(9, 1, 2, 3, 5),
-                             labels = c("White", 
-                                        "South Asian", "Chinese", "Japanese", 
-                                        "Filipino"
-                                        )
+                             # levels = c(9, 1, 2, 3, 5),
+                             # labels = c(9"White", 
+                                        # 1"South Asian", 2"Chinese", 3"Japanese", 
+                                        # 5"Filipino"
+                             levels = c(9, 2, 3, 5, 1),
+                             labels = c("White", "Chinese", "Japanese", 
+                                        "Filipino", "South Asian")
+                                        
       ),
       
       EDUCATION_REV = factor(EDUCATION_REV, levels = c(1:6), 
@@ -70,34 +73,53 @@ t1_relabel <- function(df) {
                                     labels = c("Dementia", "Death", 
                                                "Administratively Censored", 
                                                "End of Membership", 
-                                               "Censored 90+"))
-      
+                                               "Censored 90+")), 
+      # added for R1
+      SMOKING_STATUS = factor(SMOKING_STATUS, levels = 1:3,
+                              labels = c("Never", "Former", "Current"))
     )
   
   var_label(tb1_df) <- list(
-    SURVEY_AGE = "Survey age [Mean (SD)]", 
-    FEMALE = "Female", 
-    EDUCATION_REV = "Education attainment", 
-    EDU_GE_COLLEGE = "College degree or more",
-    EDU_3 = "Education attainment: 3 categories",
-    USABORN_REV = "US born",
-    MARITALSTATUS = "Marital status", 
-    GENERALHEALTH = "General health",
-    INCOME_PP = "Household-adjusted income [Mean (SD)]",
-    MAIN_DEM_V1_END_TYPE = "End of follow up event",
-    MAIN_DEM_V1_FU_TIME = "Follow up time [Mean (SD)]",
+    SURVEY_AGE = "Survey age, years [mean (SD)]", 
+    FEMALE = "Female, n (%)", 
+    EDUCATION_REV = "Education attainment, n (%)", 
+    EDU_GE_COLLEGE = "College degree or more, n (%)",
+    EDU_3 = "Education attainment: 3 categories, n (%)",
+    USABORN_REV = "US born, n (%)",
+    MARITALSTATUS = "Marital status, n (%)", 
+    GENERALHEALTH = "General health, n (%)",
+    INCOME_PP = "Household-adjusted income, dollars [mean (SD)]",
+    MAIN_DEM_V1_END_TYPE = "End of follow up event, n (%)",
+    MAIN_DEM_V1_FU_TIME = "Follow up time, years [mean (SD)]",
     DIAB_DX5YR_FLAG = "Diabetes exposure 5+ years pre-survey",
     DIAB_DX7YR_FLAG = "Diabetes exposure 7+ years pre-survey",
     DIAB_DX9YR_FLAG = "Diabetes exposure 9+ years pre-survey",
-    HTN_DX5YR_FLAG = "Hypertension diagnosis 5+ years pre-survey",
-    HTN_DX7YR_FLAG = "Hypertension diagnosis 7+ years pre-survey",
-    HTN_DX9YR_FLAG = "Hypertension diagnosis 9+ years pre-survey",
-    FIRST_PREVSTROKE_FLAG = "History of stroke", 
-    EHR_HT_MEDIAN = "EHR Height [Mean (SD)]"
+    HTN_DX5YR_FLAG = "Hypertension diagnosis 5+ years pre-survey, n (%)",
+    HTN_DX7YR_FLAG = "Hypertension diagnosis 7+ years pre-survey, n (%)",
+    HTN_DX9YR_FLAG = "Hypertension diagnosis 9+ years pre-survey, n (%)",
+    FIRST_PREVSTROKE_FLAG = "History of stroke, n (%)", 
+    EHR_HT_MEDIAN = "EHR height, in [mean (SD)]", 
+    # added for R1
+    SMOKING_STATUS = "Smoking status, n (%)"
   )
   
   return(tb1_df)
 }
+
+# variables in Table 1 added in R1
+t1_relabel_add <- function(df) {
+  tb1_df <- df %>% 
+    mutate(
+      SR_DEPRESS = factor(SR_DEPRESS, levels = c(1, 0), 
+                          labels = c("Yes", "No/Missing"))
+    )
+  var_label(tb1_df) <- list(
+    SR_BMI = "BMI [mean (SD)]", 
+    SR_DEPRESS = "Self-rated depression, n (%)"
+  )
+  return(tb1_df)
+}
+
 
 # customized function for rendering continuous variables in table 1's
 my.render.cont <- function(x) {
@@ -121,57 +143,88 @@ my.render.cat_imp <- function(x, value.prefix = "") {
 }
 
 # function to apply Rubin's rule to imputed continuous variables
-# namely INCOME_PP and EHR_HT_MEDIAN
 
-imp_cts_var_tbl1 <- function(df, DIAB_FLAG) {
-  cts_vars <- c("EHR_HT_MEDIAN", "INCOME_PP")
+imp_cts_var_tbl1 <- function(df, cts_vars, grp) {
+  # df <- tbl1_data_post_MI_5
+  # cts_vars is a list that looks like:
+  # cts_vars <- list("INCOME_PP" = 0, "EHR_HT_MEDIAN" = 1)
+  # where the names of the items are variable names, and 
+  # the numbers are rounding digits
+  # grp <- c("ETHNICITY_REV", "DIAB_DX5YR_FLAG")
   
-  # save grouping labels
-  race_ethn_diab <- df %>% 
-    filter(imp == 1) %>% 
-    select(SUBJID, ETHNICITY_REV, all_of(DIAB_FLAG))
-  # only work on related vars
-  cts_data <- df %>% 
-    select(SUBJID, imp, ETHNICITY_REV, all_of(DIAB_FLAG), all_of(cts_vars))
-  # set up output dataframe
-  out <- race_ethn_diab %>% 
-    group_by(ETHNICITY_REV, get(DIAB_FLAG)) %>% 
-    group_keys() %>% 
-    mutate(EHR_HT_MEDIAN = NA, INCOME_PP = NA) 
+  out <- df %>% 
+    group_by(across(all_of(grp))) %>% 
+    group_keys() 
   
-  # prepare wide data for each var
-  cts_data_HT <- cts_data %>% 
-    select(SUBJID, imp, EHR_HT_MEDIAN) %>% 
-    pivot_wider(id_cols = SUBJID, names_from = imp, values_from = EHR_HT_MEDIAN) %>% 
-    merge(race_ethn_diab, by = "SUBJID") %>% 
-    group_split(ETHNICITY_REV, get(DIAB_FLAG), .keep = FALSE)
-  cts_data_INCOME <- cts_data %>% 
-    select(SUBJID, imp, INCOME_PP) %>% 
-    pivot_wider(id_cols = SUBJID, names_from = imp, values_from = INCOME_PP) %>% 
-    merge(race_ethn_diab, by = "SUBJID") %>% 
-    group_split(ETHNICITY_REV, get(DIAB_FLAG), .keep = FALSE)
-  
-  for (i in 1:dim(out)[1]) {
-    # calculate mean and SD of height for each imputation
-    imp_mean_HT <- cts_data_HT[[i]][-22] %>% 
-      summarise(across(!SUBJID, mean)) %>% as.numeric()
-    imp_sd_HT <- cts_data_HT[[i]][-22] %>% 
-      summarise(across(!SUBJID, sd)) %>% as.numeric()
-    # combine means and SDs of height from 20 imputations
-    out[i, 3] <- paste0(round(mean(imp_mean_HT), 1), 
-                        " (", round(sqrt(mean(imp_sd_HT^2) + var(imp_mean_HT)), 1), ")")
-    # similar for income
-    imp_mean_INCOME <- cts_data_INCOME[[i]][-22] %>% 
-      summarise(across(!SUBJID, mean)) %>% as.numeric()
-    imp_sd_INCOME <- cts_data_INCOME[[i]][-22] %>% 
-      summarise(across(!SUBJID, sd)) %>% as.numeric()
-    
-    out[i, 4] <- paste0(round(mean(imp_mean_INCOME), 0), 
-                        " (", round(sqrt(mean(imp_sd_INCOME^2) + var(imp_mean_INCOME)), 0), ")")
+  for (var in names(cts_vars)) {
+    temp <- df %>% 
+      group_by(across(all_of(c("imp", grp)))) %>% 
+      summarise(mean_imp = mean(get(var)), var_imp = var(get(var))) %>% 
+      ungroup() %>% 
+      group_by(across(all_of(grp))) %>% 
+      summarise(mean = mean(mean_imp), 
+                sd = mean(var_imp) %>% sqrt()) %>% 
+      mutate(out = paste0(round_pad(mean, cts_vars[[var]]), 
+                          " (", round_pad(sd, cts_vars[[var]]), ")"))
+    out[var] <- temp$out
   }
   
-  return(out)
+  return(t(out))
 }
+
+
+# # function to apply Rubin's rule to imputed continuous variables
+# # namely INCOME_PP and EHR_HT_MEDIAN
+# 
+# imp_cts_var_tbl1 <- function(df, DIAB_FLAG) {
+#   cts_vars <- c("EHR_HT_MEDIAN", "INCOME_PP")
+#   
+#   # save grouping labels
+#   race_ethn_diab <- df %>% 
+#     filter(imp == 1) %>% 
+#     select(SUBJID, ETHNICITY_REV, all_of(DIAB_FLAG))
+#   # only work on related vars
+#   cts_data <- df %>% 
+#     select(SUBJID, imp, ETHNICITY_REV, all_of(DIAB_FLAG), all_of(cts_vars))
+#   # set up output dataframe
+#   out <- race_ethn_diab %>% 
+#     group_by(ETHNICITY_REV, get(DIAB_FLAG)) %>% 
+#     group_keys() %>% 
+#     mutate(EHR_HT_MEDIAN = NA, INCOME_PP = NA) 
+#   
+#   # prepare wide data for each var
+#   cts_data_HT <- cts_data %>% 
+#     select(SUBJID, imp, EHR_HT_MEDIAN) %>% 
+#     pivot_wider(id_cols = SUBJID, names_from = imp, values_from = EHR_HT_MEDIAN) %>% 
+#     merge(race_ethn_diab, by = "SUBJID") %>% 
+#     group_split(ETHNICITY_REV, get(DIAB_FLAG), .keep = FALSE)
+#   cts_data_INCOME <- cts_data %>% 
+#     select(SUBJID, imp, INCOME_PP) %>% 
+#     pivot_wider(id_cols = SUBJID, names_from = imp, values_from = INCOME_PP) %>% 
+#     merge(race_ethn_diab, by = "SUBJID") %>% 
+#     group_split(ETHNICITY_REV, get(DIAB_FLAG), .keep = FALSE)
+#   
+#   for (i in 1:dim(out)[1]) {
+#     # calculate mean and SD of height for each imputation
+#     imp_mean_HT <- cts_data_HT[[i]][-22] %>% 
+#       summarise(across(!SUBJID, mean)) %>% as.numeric()
+#     imp_sd_HT <- cts_data_HT[[i]][-22] %>% 
+#       summarise(across(!SUBJID, sd)) %>% as.numeric()
+#     # combine means and SDs of height from 20 imputations
+#     out[i, 3] <- paste0(round(mean(imp_mean_HT), 1), 
+#                         " (", round(sqrt(mean(imp_sd_HT^2) + var(imp_mean_HT)), 1), ")")
+#     # similar for income
+#     imp_mean_INCOME <- cts_data_INCOME[[i]][-22] %>% 
+#       summarise(across(!SUBJID, mean)) %>% as.numeric()
+#     imp_sd_INCOME <- cts_data_INCOME[[i]][-22] %>% 
+#       summarise(across(!SUBJID, sd)) %>% as.numeric()
+#     
+#     out[i, 4] <- paste0(round(mean(imp_mean_INCOME), 0), 
+#                         " (", round(sqrt(mean(imp_sd_INCOME^2) + var(imp_mean_INCOME)), 0), ")")
+#   }
+#   
+#   return(out)
+# }
 
 
 
